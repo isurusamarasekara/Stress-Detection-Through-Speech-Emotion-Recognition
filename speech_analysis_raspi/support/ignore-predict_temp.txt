@@ -1,0 +1,136 @@
+# Can optimize this by removing y_pred.append(np.argmax(y_hat)) line inside loop and y_probs.append(fn_prob) outside loop
+# But they are just there for my reference.
+def predict_ravdess_male(signal='', rate=''):
+    modelconfig = sl.load_model_config(database=confv.database_emodb, gender=confv.gender_male, mode=confv.ml_mode_convolutional)
+    print(modelconfig.database)
+    print(modelconfig.gender)
+    print(modelconfig.mode)
+    print(modelconfig.nfilt)
+    print(modelconfig.nfeat)
+    print(modelconfig.nfft)
+    print(modelconfig.step)
+    print(modelconfig.classes)
+    print(modelconfig.features_save_name)
+    print(modelconfig.model_config_save_name)
+    print(modelconfig.training_log_name)
+    print(modelconfig.model_save_name)
+    print(modelconfig.model_h5_save_name)
+    print(modelconfig.model_tflite_save_name)
+    print(modelconfig.feature_path)
+    print(modelconfig.model_config_path)
+    print(modelconfig.training_log_path)
+    print(modelconfig.model_path)
+    print(modelconfig.model_h5_path)
+    print(modelconfig.model_tflite_path)
+
+    # model_path = confm.get_universal_path(modelconfig.model_h5_path)
+    # if not dfc.check_file_existence(model_path):
+    #     print("Saved model does not exist for {database} - {gender}".format(database=confv.database_ravdess, gender=confv.gender_male))
+    #     sys.exit()
+    # loaded_model = load_model(model_path)   # No need to use the model path from modelconfig. B/c this restricts me to
+    #                                                     # the exact same saved_models directory structure as used in the backbone development.
+    #                                                     # Just can get the path from using os.path.join
+    #
+    # y_pred = []
+    # y_prob = []
+    # fn_prob = {}
+    # count = 1
+    # for i in range(0, signal.shape[0] - modelconfig.step, modelconfig.step):
+    #     sample = signal[i:i + modelconfig.step]
+    #     x = mfcc(sample, rate, numcep=modelconfig.nfeat, nfilt=modelconfig.nfilt, nfft=modelconfig.nfft)
+    #     x = (x - modelconfig.min) / (modelconfig.max - modelconfig.min)
+    #
+    #     x = x.reshape(1, x.shape[0], x.shape[1], 1)
+    #     y_hat = loaded_model.predict(x)
+    #     print(y_hat)
+    #     print("10th of a second chunk number: ", count)
+    #     print("Probabilities of prediction for the classes ", modelconfig.classes, " are, respectively, ", y_hat)
+    #     print("Relevant final prediction for the #", count, " 1/10 second chunk: ", [modelconfig.classes[np.argmax(y)] for y in y_hat], '\n\n')
+    #     # print("ARGMAX:  ", np.argmax(y_hat))
+    #     y_prob.append(y_hat)
+    #     y_pred.append(np.argmax(y_hat))
+    #     count = count + 1
+    #     return None, None
+    # # print("y_prob: ", y_prob)
+    # # print("y_pred: ", y_pred)
+    #
+    # fn_prob = np.mean(y_prob, axis=0).flatten()
+    # # print("fn_prob: ", fn_prob)
+    # print("The mean of all probabilities of 1/10 second chunks from the single audio file for the classes ", modelconfig.classes, " are ", fn_prob)
+    #
+    # y_probs = []
+    # # print("y_prob: ", y_prob)
+    # y_probs.append(fn_prob)
+    # # print("y_probs: ", y_probs)
+    #
+    # # print(modelconfig.classes)
+    # y_pred = [modelconfig.classes[np.argmax(y)] for y in y_probs]
+    # print("Final prediction for the whole audio file: ", y_pred)
+    # # return y_pred
+    # return y_pred, fn_prob
+
+    model_path = confm.get_universal_path(modelconfig.model_tflite_path)
+    if not dfc.check_file_existence(model_path):
+        print("Saved model does not exist for {database} - {gender}".format(database=confv.database_ravdess, gender=confv.gender_male))
+        sys.exit()
+
+    # Load the TFLite model and allocate tensors.
+    interpreter = tf.lite.Interpreter(model_path=model_path)
+    interpreter.allocate_tensors()
+
+    # Get input and output tensors.
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
+    print("Input Shape:", input_details[0]['shape'])
+    print("Input Type:", input_details[0]['dtype'])
+    print("Output Shape:", output_details[0]['shape'])
+    print("Output Type:", output_details[0]['dtype'])
+    print(input_details[0]['index'])
+    print(output_details[0]['index'])
+    print(input_details[0])
+    print(output_details[0])
+
+    y_pred = []
+    y_prob = []
+    fn_prob = {}
+    count = 1
+    for i in range(0, signal.shape[0] - modelconfig.step, modelconfig.step):
+        sample = signal[i:i + modelconfig.step]
+        x = mfcc(sample, rate, numcep=modelconfig.nfeat, nfilt=modelconfig.nfilt, nfft=modelconfig.nfft)
+        x = (x - modelconfig.min) / (modelconfig.max - modelconfig.min)
+
+        x = x.reshape(1, x.shape[0], x.shape[1], 1)
+
+        x = np.array(x, dtype=np.float32)
+        interpreter.set_tensor(input_details[0]['index'], x)
+        interpreter.invoke()
+        y_hat = interpreter.get_tensor(output_details[0]['index'])
+        return None, None
+        print("10th of a second chunk number: ", count)
+        print("Probabilities of prediction for the classes ", modelconfig.classes, " are, respectively, ", y_hat)
+        print("Prediction results shape:", y_hat.shape)
+        print("Prediction class position (ARGMAX)", np.argmax(y_hat, axis=1))
+        print("Relevant final prediction for the #", count, " 1/10 second chunk: ", [modelconfig.classes[np.argmax(y)] for y in y_hat], '\n\n')
+        y_prob.append(y_hat)
+        y_pred.append(np.argmax(y_hat))
+        count = count + 1
+
+
+    # print("y_prob: ", y_prob)
+    # print("y_pred: ", y_pred)
+
+    fn_prob = np.mean(y_prob, axis=0).flatten()
+    # print("fn_prob: ", fn_prob)
+    print("The mean of all probabilities of 1/10 second chunks from the single audio file for the classes ",
+          modelconfig.classes, " are ", fn_prob)
+
+    y_probs = []
+    # print("y_prob: ", y_prob)
+    y_probs.append(fn_prob)
+    # print("y_probs: ", y_probs)
+
+    # print(modelconfig.classes)
+    y_pred = [modelconfig.classes[np.argmax(y)] for y in y_probs]
+    print("Final prediction for the whole audio file: ", y_pred)
+    # return y_pred
+    return y_pred, fn_prob

@@ -1,0 +1,99 @@
+import backbone_independent.support.configurations_variables as confv
+import backbone_independent.support.saving_loading as sl
+from keras.models import load_model
+from python_speech_features import mfcc
+import numpy as np
+import librosa
+import backbone_independent.support.calculations as calc
+
+
+def predict(signal, rate, gender):
+    # If a common predict method is going to be used, then for precorded mains also the file shuld be loaded
+    # in the main and signal and rate should be passed here.
+    pass
+
+
+def predict_prerecorded(file_path, gender):
+    signal, rate = input_data_cleaning_old_way(file_path)
+
+    if gender == confv.gender_male:
+        y_pred, fn_prob = predict_male(signal, rate)
+    elif gender == confv.gender_female:
+        y_pred, fn_prob = predict_female(signal, rate)
+
+    return y_pred, fn_prob
+
+
+def predict_real_time(signal, rate, gender):
+    if gender == confv.gender_male:
+        y_pred, fn_prob = predict_male(signal, rate)
+    elif gender == confv.gender_female:
+        y_pred, fn_prob = predict_female(signal, rate)
+
+    return y_pred, fn_prob
+
+
+def predict_male(signal, rate):
+    y_pred, fn_prob = predict_ravdess_male(signal, rate)
+
+    return y_pred, fn_prob
+
+
+def predict_female(signal, rate):
+    pass
+
+
+# Can optimize this by removing y_pred.append(np.argmax(y_hat)) line inside loop and y_probs.append(fn_prob) outside loop
+# But they are just there for my reference.
+def predict_ravdess_male(signal='', rate=''):
+    modelconfig = sl.load_model_config(database=confv.database_ravdess, gender=confv.gender_male, mode=confv.ml_mode_convolutional)
+    loaded_model = load_model(modelconfig.model_path)   # No need to use the model path from modelconfig. B/c this restricts me to
+                                                        # the exact same saved_models directory structure as used in the backbone development.
+                                                        # Just can get the path from using os.path.join
+
+    y_pred = []
+    y_prob = []
+    fn_prob = {}
+    count = 1
+    for i in range(0, signal.shape[0] - modelconfig.step, modelconfig.step):
+        sample = signal[i:i + modelconfig.step]
+        x = mfcc(sample, rate, numcep=modelconfig.nfeat, nfilt=modelconfig.nfilt, nfft=modelconfig.nfft)
+        x = (x - modelconfig.min) / (modelconfig.max - modelconfig.min)
+
+        x = x.reshape(1, x.shape[0], x.shape[1], 1)
+        y_hat = loaded_model.predict(x)
+        print("10th of a second chunk number: ", count)
+        print("Probabilities of prediction for the classes ", modelconfig.classes, " are, respectively, ", y_hat)
+        print("Relevant final prediction for the #", count, " 1/10 second chunk: ", [modelconfig.classes[np.argmax(y)] for y in y_hat], '\n\n')
+        # print("ARGMAX:  ", np.argmax(y_hat))
+        y_prob.append(y_hat)
+        y_pred.append(np.argmax(y_hat))
+        count = count + 1
+    # print("y_prob: ", y_prob)
+    # print("y_pred: ", y_pred)
+
+    fn_prob = np.mean(y_prob, axis=0).flatten()
+    # print("fn_prob: ", fn_prob)
+    print("The mean of all probabilities of 1/10 second chunks from the single audio file for the classes ", modelconfig.classes, " are ", fn_prob)
+
+    y_probs = []
+    # print("y_prob: ", y_prob)
+    y_probs.append(fn_prob)
+    # print("y_probs: ", y_probs)
+
+    # print(modelconfig.classes)
+    y_pred = [modelconfig.classes[np.argmax(y)] for y in y_probs]
+    print("Final prediction for the whole audio file: ", y_pred)
+    # return y_pred
+    return y_pred, fn_prob
+
+
+def predict_emodb_male():
+    pass
+
+
+def input_data_cleaning_old_way(file_path):
+    signal, rate = librosa.load(file_path, sr=confv.resample_rate)
+    signal = calc.prerecorded_envelope(signal=signal, threshold=confv.envelope_threshold)
+
+    return signal, rate
