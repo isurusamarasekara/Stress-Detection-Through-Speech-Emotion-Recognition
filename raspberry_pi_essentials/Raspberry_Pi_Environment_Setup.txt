@@ -1,0 +1,220 @@
+/***
+By Isuru Samarasekara
+***/
+
+Connect the Raspberry Pi to a network.
+
+
+=========Update the system=========
+t> sudo apt-get update
+t> sudo apt-get upgrade
+t> sudo apt-get dist-upgrade
+t> sudo apt-get autoremove
+t> sudo apt-get update && sudo apt-get upgrade && sudo apt-get dist-upgrade
+t> sudo reboot
+
+
+=========Enable SSH=========
+t> sudo raspi-config
+	-> 3 Interface Options
+	-> P2 SSH -> enable
+t> sudo reboot
+
+from another pc in the same network, try "ssh pi@<ip address of pi>
+
+
+=========Install the required things to achieve LAN remote connection through "Windows Remote Desktop"=========
+t> sudo apt-get remove xrdp vnc4server tightvncserver
+t> sudo apt-get install tightvncserver
+t> sudo apt-get install xrdp
+t> sudo reboot
+
+
+=========Setting recording and playback audio related stuff=========
+--Testing audio recording and playing--
+t> arecord -l
+	-> Record the card and device 
+t> aplay -l
+	-> Record the card and device 
+
+t> arecord --rate=48000 --duration=5 --format=S16_LE -D plughw:2,0 --dump-hw-params sample.wav
+t> aplay -D plughw:1,0 sample.wav
+
+--Setting audio recording and playing--
+t> sudo raspi-config
+	-> 1 System Options
+	-> S2 Audio
+	-> 1 Headphones
+
+Now a ".asoundrc" file will have been created in the "/home/pi" path
+Replace the content of ".asoundrc" with the below code.
+
+		---Start of .asoundrc content---
+pcm.!default {
+  type asym
+  capture.pcm "mic"
+  playback.pcm "speaker"
+}
+
+pcm.mic {
+  type plug
+  slave {
+    pcm "hw:2,0"
+  }
+}
+
+pcm.speaker { 
+  type plug
+  slave { 
+    pcm "hw:1,0"
+    rate 16000
+  }
+}
+		---Finish of .asoundrc content---
+
+t> alsamixer
+	-> F3:[Playback]
+	-> F6:Select sound card
+	-> Select headphones
+	-> Increase sound upto about 70
+
+
+Now try without the the hw specification in the command (Removing -D and following plughw part as below. B/c now these hardware config is defaulted into the .asoundrc file)
+
+t> arecord --rate=48000 --duration=5 --format=S16_LE --dump-hw-params sample.wav
+t> aplay sample.wav
+
+
+=========Creating and cloning project=========
+t> mkdir "destress_project"
+clone "speech_analysis_raspi" here
+move the setup.py from inside "speech_analysis_raspi to" to "destress_project"
+
+=========Creating Python Virtual Environment=========
+t> python3 -m venv venv
+t> source venv/bin/activate
+(venv) t> pip list
+
+=========Installing librosa=========
+After activating the environment:
+(venv) t> sudo apt-get install llvm
+(venv) t> apt-cache policy llvm
+	(to find the llvm version just installed. For me it's '7.0')
+
+Find the compatible llvmlite versions from this link 'https://pypi.org/project/llvmlite/'. For me 0.27.0-0.28.0 & 0.29.0-0.32.0 are compatible
+Find the path of llvm,
+(venv) t> which llvm-config
+	(for me "/usr/bin/llvm-config")
+Install the llvmlite compatible version
+(venv) t> LLVM_CONFIG=/usr/bin/llvm-config pip install llvmlite==0.32 => disregard the error "Failed building wheel for llvmlite" if "Successfully installed llvmlite-0.32.0" comes up
+
+(venv) t> pip install numpy==1.16.1 numba==0.49
+(venv) t> pip install librosa
+
+Go to python console and try importing librosa -
+(venv) t> python
+>>> import librosa
+
+If errors come up with something like " Original error was: libf77blas.so.3:..." exit() from the python console and execute the following
+(venv) t> sudo apt-get install libatlas-base-dev
+
+Again go to python console and try importing librosa -
+(venv) t> python
+>>> import librosa
+
+Now there should be no errors
+
+
+=========Installing Tensorflow=========
+go to https://github.com/PINTO0309/Tensorflow-bin/#usage:
+go to the "Usage" section and "Example of Python 3.x + Tensorflow v2 series" sub-section
+Execute the codes here with the minor modifications as follows:
+
+(venv) t> sudo apt-get install -y libhdf5-dev libc-ares-dev libeigen3-dev gcc gfortran python-dev libgfortran5 libatlas3-base libatlas-base-dev libopenblas-dev libopenblas-base libblas-dev liblapack-dev cython libatlas-base-dev openmpi-bin libopenmpi-dev python3-dev
+(venv) t> pip install keras_applications==1.0.8 --no-deps
+(venv) t> pip install keras_preprocessing==1.1.0 --no-deps
+(venv) t> pip install h5py==2.9.0
+(venv) t> pip install pybind11
+(venv) t> pip install -U --user six wheel mock
+
+here -> go to "https://github.com/lhelontra/tensorflow-on-arm/releases", find the tensorflow version you want (I'm going with 2.3.0)
+There to find the relevant wheel, first find the architecture of your pi by foillowing below,
+	(venv) t> uname -m (https://raspberrypi.stackexchange.com/questions/69562/is-current-raspbian-pi-3-b-32-or-64-bits-os)
+		My Pi 4 says armv7l which is 32 bit
+	OR
+	(venv) t> cat /proc/cpuinfo (https://unix.stackexchange.com/questions/136407/is-my-linux-arm-32-or-64-bit)
+		model name	: ARMv7 Processor rev 3 (v7l)
+	
+	Find your python version by typing,
+		(venv) t> python --version
+			(mine is Python 3.7.3)
+
+	So I'm getting the tensorflow 2.3.0 wheel for 3.7 (debian buster) which is:
+		tensorflow-2.3.0-cp37-none-linux_armv7l.whl
+
+	Right-click on the file, select "Copy link address" and go to a different folder than "destress_project" (for cleanliness) and type:
+		(venv) t> wget <copied link> -> Ex: wget https://github.com/lhelontra/tensorflow-on-arm/releases/download/v2.3.0/tensorflow-2.3.0-cp37-none-linux_armv7l.whl
+
+Uninstall any version of tensorflow that there might exist by
+(venv) t> pip uninstall tensorflow
+(venv) t> pip install <name_of_the_downloaded_wheel_file>
+	(Ex: pip install tensorflow-2.3.0-cp37-none-linux_armv7l.whl)
+
+While installing, for me I got
+"tensorboard 2.3.0 has requirement setuptools>=41.0.0, but you'll have setuptools 40.8.0 which is incompatible." error, but the installing of tensorflow succeeded.
+But since I wanted to get everything perfect, I ran the command,
+	(venv) t> pip install <name_of_the_downloaded_wheel_file>
+	, again and it automatically remove the lower version and installed the latest. OR
+I could have run,
+	(venv) t> pip install --upgrade setuptools" also.
+Anyway you would want it to do is fine. If a minor error like that shows up if you want to find out if it's still there after upgrading, just run,
+	(venv) t> pip install <name_of_the_downloaded_wheel_file>
+	, again.
+
+exit from the terminal and open a new one.
+
+Find if it's installed correctly by importing it.
+(venv) t> python
+>>> import tensorflow as tf
+>>> tf.__version__
+'2.3.0'
+
+
+=========Installing tensorflow lite=========
+Go to https://www.tensorflow.org/lite/guide/python and find the relevant version and copy the link address.
+Go to a different folder than destress_project (due to cleanliness), and type 'wget <path>'. Ex: wget https://github.com/google-coral/pycoral/releases/download/release-frogfish/tflite_runtime-2.5.0-cp37-cp37m-linux_armv7l.whl
+(venv) t> pip install <name_of_the_downloaded_wheel_file>
+
+check if successful,
+(venv) t> python
+>>> import tflite_runtime.interpreter as tflit
+
+If no errors, successful.
+
+
+
+Just in case, reboot the system -> sudo reboot
+
+
+=========Installing speech project as a library in editable state=========
+This is due to parent sibling directory import issues. Go to the following link to get the idea.
+https://stackoverflow.com/questions/6323860/sibling-package-imports/50193944#50193944
+
+Go to the destress_project folder.
+Activate environment by,
+    t> source venv/bin/activate
+make sure setup.py is in the destress_project directory (inside which you must have - speech_analysis_raspi wrap folder, venv virtual environment, and setup.py)
+make sure you are in the destress_project directory and execute,
+    pip install -e .
+pip list and see where the entry "speech-analysis-raspi  1.0          /home/pi/destress_project" is there
+
+=========Installing other needed python libraries=========
+pip install pyaudio
+pip install sounddevice
+pip install soundfile
+pip install simpleaudio
+pip install noisereduce
+pip install pandas
+pip install matplotlib
+pip install python_speech_features
+
