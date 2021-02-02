@@ -1,0 +1,90 @@
+import librosa
+import backbone.support.configurations as conf
+import backbone.support.calculations as calc
+from python_speech_features import mfcc
+import numpy as np
+from keras.models import load_model
+import backbone.support.config_saving_loading as csl
+
+
+def predict_prerecorded(file_path, gender):
+    signal, rate = input_data_cleaning(file_path)
+
+    if gender == conf.gender_male:
+        y_pred, fn_prob = predict_male(signal, rate)
+    elif gender == conf.gender_female:
+        prediction = predict_female(signal, rate)
+
+    return y_pred, fn_prob
+
+
+def predict_real_time(signal, rate, gender):
+    if gender == conf.gender_male:
+        y_pred, fn_prob = predict_male(signal, rate)
+    elif gender == conf.gender_female:
+        prediction = predict_female(signal, rate)
+
+    return y_pred, fn_prob
+
+
+def predict_male(signal, rate):
+    y_pred, fn_prob = predict_ravdess_male(signal, rate)
+
+    return y_pred, fn_prob
+
+
+def predict_female(signal, rate):
+    pass
+
+
+def predict_ravdess_male(signal, rate):
+    modelconfig = csl.load_model_config_info(dataset=conf.dataset_ravdess, gender=conf.gender_male, mode=conf.ml_mode_convolutional)
+    loaded_model = load_model(modelconfig.model_path)
+
+    y_pred = []
+    y_prob = []
+    fn_prob = {}
+    count = 1
+    for i in range(0, signal.shape[0] - modelconfig.step, modelconfig.step):
+        sample = signal[i:i + modelconfig.step]
+        x = mfcc(sample, rate, numcep=modelconfig.nfeat, nfilt=modelconfig.nfilt, nfft=modelconfig.nfft)
+        x = (x - modelconfig.min) / (modelconfig.max - modelconfig.min)
+
+        x = x.reshape(1, x.shape[0], x.shape[1], 1)
+        y_hat = loaded_model.predict(x)
+        print("10th of a second chunk number: ", count)
+        print("Probabilities of prediction for the classes ", modelconfig.classes, " are, respectively, ", y_hat)
+        print("Relevant final prediction for the #", count, " 1/10 second chunk: ", [modelconfig.classes[np.argmax(y)] for y in y_hat], '\n\n')
+        # print("ARGMAX:  ", np.argmax(y_hat))
+        y_prob.append(y_hat)
+        y_pred.append(np.argmax(y_hat))
+        count = count + 1
+    # print("y_prob: ", y_prob)
+    # print("y_pred: ", y_pred)
+
+    fn_prob = np.mean(y_prob, axis=0).flatten()
+    # print("fn_prob: ", fn_prob)
+    print("The mean of all probabilities of 1/10 second chunks from the single audio file for the classes ", modelconfig.classes, " are ", fn_prob)
+
+    y_probs = []
+    # print("y_prob: ", y_prob)
+    y_probs.append(fn_prob)
+    # print("y_probs: ", y_probs)
+
+    # print(modelconfig.classes)
+    y_pred = [modelconfig.classes[np.argmax(y)] for y in y_probs]
+    print("Final prediction for the whole audio file: ", y_pred)
+    # return y_pred
+    return y_pred, fn_prob
+
+
+def predict_emodb_male():
+    pass
+
+
+def input_data_cleaning(file_path):
+    signal, rate = librosa.load(file_path, sr=conf.resample_rate)
+    mask = calc.envelope(signal, rate, 0.005)
+    signal = signal[mask]
+
+    return signal, rate
