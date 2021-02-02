@@ -1,0 +1,124 @@
+import os
+import pyaudio
+import wave
+import backbone_independent.support.recording_configurations as rconf
+import backbone_independent.support.predict as pr
+import backbone_independent.support.configurations_variables as confv
+import backbone_independent.support.directory_file_checking as dfc
+
+
+def record(time_to_record, audio_save_path):
+    print('Started recording audio')
+
+    # Create an interface to PortAudio
+    p = pyaudio.PyAudio()
+    stream = p.open(format=rconf.FORMAT, channels=rconf.CHANNELS, rate=rconf.RATE_prerecorded, frames_per_buffer=rconf.CHUNKSIZE_prerecorded, input=True)
+
+    # Initialize array to store frames
+    frames = []
+
+    # Store data in chunks for given seconds seconds
+    for i in range(0, int(rconf.RATE_prerecorded/rconf.CHUNKSIZE_prerecorded * time_to_record)):
+        data = stream.read(num_frames=rconf.CHUNKSIZE_prerecorded)     # The number of frames to read.
+        frames.append(data)
+
+    # Stop stream
+    stream.stop_stream()
+    stream.close()
+    # Close the PortAudio interface
+    p.terminate()
+    print('Finished recording audio')
+
+    print('Started saving to an audio file')
+    # Save the recorded data as a WAV file
+    wf = wave.open(audio_save_path, 'wb')
+    wf.setnchannels(rconf.CHANNELS)
+    wf.setsampwidth(p.get_sample_size(rconf.FORMAT))
+    wf.setframerate(rconf.RATE_prerecorded)
+    wf.writeframes(b''.join(frames))
+    wf.close()
+    print('Finished saving audio file')
+
+
+def play(audio_path):
+    print('Started playing recorded audio file')
+
+    if os.path.isfile(audio_path):
+        # Open the sound file
+        wf = wave.open(audio_path, 'rb')
+
+        # Create an interface to PortAudio
+        p = pyaudio.PyAudio()
+
+        # Open a stream object to write the WAV file to
+        stream = p.open(format=p.get_format_from_width(wf.getsampwidth()), channels=wf.getnchannels(), rate=wf.getframerate(), output=True)
+
+        # Read data in chunks
+        data = wf.readframes(nframes=rconf.CHUNKSIZE_prerecorded)
+
+        # Play the sound by writing the audio data to the stream
+        while len(data) > 0:
+            stream.write(data)
+            data = wf.readframes(rconf.CHUNKSIZE_prerecorded)
+
+        # Stop stream
+        stream.stop_stream()
+        stream.close()
+        # Close the PortAudio interface
+        p.terminate()
+        print('Finished playing recorded audio file')
+
+    else:
+        print('Record a file first')
+
+
+def main():
+    # Create the realtime directory if not already created
+    dfc.check_dir(confv.prerecorded_realtime_dir)
+
+    # Clean and empty the uploads directory, just in case, before any upload takes place
+    dfc.clean_relevant_directory(confv.prerecorded_realtime_dir)
+
+    # User selects the gender
+    gender = confv.gender_male
+
+    # User input number of seconds to record
+    seconds = 3
+
+    aud_fl_pth = rconf.prerecorded_realtime_file_aud_fl_pth
+    record(time_to_record=seconds, audio_save_path=aud_fl_pth)
+
+    # Check if the directory is empty
+    isEmpty = dfc.is_directory_empty(confv.prerecorded_realtime_dir)
+    if not isEmpty:
+        # File is set to be selected by the program from the directory just in case it is saved by another name than
+        # aud_fl_pth - which should be made impossible.
+        aud_fl_pth = dfc.get_audio_file_path_from_directory(confv.prerecorded_realtime_dir)
+
+        # Check for minimum length compliance
+        isComplied = dfc.check_for_minimum_length_compliance(aud_fl_pth)
+
+        if isComplied:
+            # Playing the audio
+            play(audio_path=aud_fl_pth)
+
+            # Predict the stress emotion
+            y_pred, fn_prob = pr.predict_prerecorded(aud_fl_pth, gender)
+            print("The stress prediction: ", y_pred[0])
+
+            None
+            # Notify in the web end
+
+        else:
+            None
+            # Notify in the web end
+
+        # Clean and empty the prerecorded-realtime-specified directory
+        dfc.clean_relevant_directory(confv.prerecorded_upload_dir)
+
+    else:
+        None
+        # Notify in the web end
+
+
+main()
