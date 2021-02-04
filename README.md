@@ -15,6 +15,11 @@
 2. backbone_independent - Windows based realtime speech stress prediction and upload-file speech stress prediction independent from the training packages at 'backbone'.
 3. speech_analysis_raspi - The raspberry pi optimized speech stress analysis component This is a complete working code where just copying this folder and running one of the prediction scripts in a virtual environment, where the required python packages are installed, is enough to get this up ad running. Find the 'requirements.txt' file inside this folder for raspberry pi's production python environment relevant for speech stress prediction.
 
+### Combined Method for Accurate Non Invasive Stress Detection
+This is only one of the two stress detection mechnisms developed in conjunction for real-time and continuous reliable dynamic non invasive human stress detection. The other is facial expression analysis. The important findings achieved through these 2 combined methods are published in IEEE.
+See Publication: https://ieeexplore.ieee.org/document/9293878
+
+
 ### Important
 The trained cleaned audio file directory, model logs directory, dataframes, features, modelconfigs, models and training metrics folders are not pushed since they contain no scriptable code but large data files.
 For a better understanding of the expected file structure, read below.
